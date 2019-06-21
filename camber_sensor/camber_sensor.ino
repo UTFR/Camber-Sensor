@@ -1,8 +1,16 @@
 //file
+// TODO: set time step using millis()
+//       test that pointers can change the values in the function and then pass to serial
+//       Test if millis works properly for dt
+//       Implement offsets? and make it start from the correct angle when turning on
+//       Low pass filter data first
+//       implement bullshit filter for both
+//       rename pitch to roll
+//       include other axes?
 
 #include <Wire.h>
 const int MPU_ADDR=0b1101000;
-const float ACCEL_SCALE_FACTOR=8192.0;
+const float ACCEL_SCALE_FACTOR=16384.0;
 const float GYRO_SCALE_FACTOR=131.0;
 
 long accelerometer_x, accelerometer_y, accelerometer_z;
@@ -12,7 +20,12 @@ float rotX, rotY, rotZ; //processed vars
 
 // setup filtered vars
 float pitch, roll, yaw;
-float *pitchPtr, *rollPtr, *yawPtr; // do I need these?
+float *pitchPtr, *rollPtr, *yawPtr; 
+
+// setup timing vars
+unsigned long startMillis;
+unsigned long currentMillis;
+const unsigned long dt = 10; // value is number of milliseconds e.g. 1000 = 1sec
 
 
 
@@ -30,20 +43,24 @@ void setup() {
   Wire.endTransmission();
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x1C); //accelerometer config
-  Wire.write(0b00001000); //+- 4g
+  Wire.write(0b00000000); //+- 2g
   Wire.endTransmission();
 
   // init pointers
-  pitch = 69.0;
+  pitch = 0;
   pitchPtr = &pitch;
   rollPtr = &roll;
   yawPtr = &yaw;
   
-
+  startMillis = millis();
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+
+  float pitchAcc;
+  float testGyrPitch;
+
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x3B);
   Wire.endTransmission();
@@ -63,6 +80,16 @@ void loop() {
   gyro_y = Wire.read()<<8 | Wire.read();
   gyro_z = Wire.read()<<8 | Wire.read();
   processGyroData();
+
+  currentMillis = millis();
+  if (currentMillis - startMillis >= dt)
+  {
+    *pitchPtr += (gyro_z / GYRO_SCALE_FACTOR) * dt / 1000;
+    pitchAcc = atan2f(accelerometer_x, accelerometer_y) * 180 / PI;
+
+    *pitchPtr = *pitchPtr * 0.98 + pitchAcc * 0.02;
+    startMillis = currentMillis;
+  }
   
 //  Serial.print("aX= ");Serial.print(gForceX);
 //  Serial.print(" | aY= ");Serial.print(gForceY);
@@ -71,11 +98,13 @@ void loop() {
 //  Serial.print(" | gX = ");Serial.print(rotX);
 //  Serial.print(" | gY = ");Serial.print(rotY);
 //  Serial.print(" | gZ = ");Serial.print(rotZ);
-  Serial.print(pitch);
+//  Serial.print(pitch);
   Serial.print(*pitchPtr);
+  //Serial.print(pitchAcc);
+  //Serial.print(testGyrPitch);
   Serial.println();
 
-  //delay(100);
+  
 }
 
 void processAccelData() {
@@ -88,10 +117,6 @@ void processGyroData() {
   rotX = gyro_x / GYRO_SCALE_FACTOR;
   rotY = gyro_y / GYRO_SCALE_FACTOR;
   rotZ = gyro_z / GYRO_SCALE_FACTOR;
-}
-
-void complementaryFilter() {
-  
 }
 
 // init the variables you need and then pointers to those variables
