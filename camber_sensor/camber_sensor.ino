@@ -3,15 +3,17 @@
 //       test that pointers can change the values in the function and then pass to serial
 //       Test if millis works properly for dt
 //       Implement offsets? and make it start from the correct angle when turning on
-//       Low pass filter data first
-//       implement bullshit filter for both
 //       rename pitch to roll
 //       include other axes?
+//       tune complementary filter -- lookup how to do this
+//       setup initializing gyroscope
+
+// possible fixes: change sampling rate on the chip itself, further increase baud, reduce prints, change scale manually, change dt
 
 #include <Wire.h>
 const int MPU_ADDR=0b1101000;
 const float ACCEL_SCALE_FACTOR=16384.0;
-const float GYRO_SCALE_FACTOR=131.0;
+const float GYRO_SCALE_FACTOR=16.4;
 
 long accelerometer_x, accelerometer_y, accelerometer_z;
 long gyro_x, gyro_y, gyro_z;
@@ -20,18 +22,20 @@ float rotX, rotY, rotZ; //processed vars
 
 // setup filtered vars
 float pitch, roll, yaw;
-float *pitchPtr, *rollPtr, *yawPtr; 
+float testGyrPitch;
+float *pitchPtr, *rollPtr, *yawPtr;
+float *testGyrPitchPtr; 
 
 // setup timing vars
 unsigned long startMillis;
 unsigned long currentMillis;
-const unsigned long dt = 10; // value is number of milliseconds e.g. 1000 = 1sec
+const unsigned long dt = 50; // value is number of milliseconds e.g. 1000 = 1sec
 
 
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(9600);
+  Serial.begin(115200);
   Wire.begin();
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x6B);
@@ -39,7 +43,7 @@ void setup() {
   Wire.endTransmission();
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x1B); //gyroscope config
-  Wire.write(0x00000000); //250 deg/sec
+  Wire.write(0b00011000); //250 deg/sec
   Wire.endTransmission();
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x1C); //accelerometer config
@@ -48,9 +52,11 @@ void setup() {
 
   // init pointers
   pitch = 0;
+  testGyrPitch = 0;
   pitchPtr = &pitch;
   rollPtr = &roll;
   yawPtr = &yaw;
+  testGyrPitchPtr = &testGyrPitch;
   
   startMillis = millis();
 }
@@ -59,7 +65,6 @@ void loop() {
   // put your main code here, to run repeatedly:
 
   float pitchAcc;
-  float testGyrPitch;
 
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x3B);
@@ -69,7 +74,6 @@ void loop() {
   accelerometer_x = Wire.read()<<8 | Wire.read();
   accelerometer_y = Wire.read()<<8 | Wire.read();
   accelerometer_z = Wire.read()<<8 | Wire.read();
-  processAccelData();
 
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x43);
@@ -79,15 +83,15 @@ void loop() {
   gyro_x = Wire.read()<<8 | Wire.read();
   gyro_y = Wire.read()<<8 | Wire.read();
   gyro_z = Wire.read()<<8 | Wire.read();
-  processGyroData();
 
   currentMillis = millis();
   if (currentMillis - startMillis >= dt)
   {
     *pitchPtr += (gyro_z / GYRO_SCALE_FACTOR) * dt / 1000;
+    *testGyrPitchPtr += (gyro_z / GYRO_SCALE_FACTOR) * dt / 1000;
     pitchAcc = atan2f(accelerometer_x, accelerometer_y) * 180 / PI;
 
-    *pitchPtr = *pitchPtr * 0.98 + pitchAcc * 0.02;
+    *pitchPtr = *pitchPtr * 0.95 + pitchAcc * 0.05;
     startMillis = currentMillis;
   }
   
@@ -98,12 +102,18 @@ void loop() {
 //  Serial.print(" | gX = ");Serial.print(rotX);
 //  Serial.print(" | gY = ");Serial.print(rotY);
 //  Serial.print(" | gZ = ");Serial.print(rotZ);
-//  Serial.print(pitch);
-  Serial.print(*pitchPtr);
-  //Serial.print(pitchAcc);
-  //Serial.print(testGyrPitch);
-  Serial.println();
 
+//  Serial.print(testGyrPitch); // below by about 40 deg
+//  Serial.print(" ");
+//  Serial.print(pitchAcc);
+//  Serial.print(" ");
+//  Serial.println(pitch);
+
+  Serial.print(pitchAcc); // still below by aboutt 40 deg... so clearly did not help to change print order... try baud rate now
+  Serial.print(" ");
+  Serial.print(pitch);
+  Serial.print(" ");
+  Serial.println(testGyrPitch);
   
 }
 
