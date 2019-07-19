@@ -11,6 +11,12 @@
 // possible fixes: change sampling rate on the chip itself, further increase baud, reduce prints, change scale manually, change dt
 
 #include <Wire.h>
+#include <global.h>
+#include <Canbus.h>
+#include <mcp2515_defs.h>
+#include <mcp2515.h>
+#include <defaults.h>
+
 const int MPU_ADDR=0b1101000;
 const float ACCEL_SCALE_FACTOR=16384.0;
 const float GYRO_SCALE_FACTOR=16.4;
@@ -22,9 +28,10 @@ float rotX, rotY, rotZ; //processed vars
 
 // setup filtered vars
 float pitch, roll, yaw;
+int canPitch; // temp var Pitch changed to split into digits
 float testGyrPitch;
 float *pitchPtr, *rollPtr, *yawPtr;
-float *testGyrPitchPtr; 
+float *testGyrPitchPtr;
 
 // setup timing vars
 unsigned long startMillis;
@@ -36,6 +43,16 @@ const unsigned long dt = 50; // value is number of milliseconds e.g. 1000 = 1sec
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
+  Serial.println("CAN Write - Testing transmission of CAN Bus messages");
+  delay(1000);
+
+  if(Canbus.init(CANSPEED_500))  //Initialise MCP2515 CAN controller at the specified speed
+    Serial.println("CAN Init ok");
+  else
+    Serial.println("Can't init CAN");
+    
+  delay(1000);
+  
   Wire.begin();
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x6B);
@@ -114,20 +131,85 @@ void loop() {
   Serial.print(pitch);
   Serial.print(" ");
   Serial.println(testGyrPitch);
+
+  tCAN message;
+
+  message.id = 0x631; //formatted in HEX
+  message.header.rtr = 0;
+  message.header.length = 8; //formatted in DEC
+
+  if (abs(pitch) < 10.0) // change negs
+  {
+    if (pitch < 0.0)
+    {
+      canPitch = int(pitch * 100.0 * (-1));
+      message.data[0] = 1;
+      message.data[1] = 0;
+      message.data[2] = 0;
+      message.data[3] = 0; //formatted in HEX
+      message.data[4] = 0;
+      message.data[5] = (canPitch / 100) % 10;
+      message.data[6] = (canPitch / 10) % 10;
+      message.data[7] = canPitch % 10;
+    }
+    else
+    {
+      canPitch = int(pitch * 100.0);
+      message.data[0] = 0;
+      message.data[1] = 0;
+      message.data[2] = 0;
+      message.data[3] = 0; //formatted in HEX
+      message.data[4] = 0;
+      message.data[5] = (canPitch / 100) % 10;
+      message.data[6] = (canPitch / 10) % 10;
+      message.data[7] = canPitch % 10;
+    }
+    
+  }
+
+  else if (abs(pitch) < 100.0) // change negs
+  {
+    if (pitch < 0.0)
+    {
+      canPitch = int(pitch * 100.0 * (-1));
+      message.data[0] = 1;
+      message.data[1] = 0;
+      message.data[2] = 0;
+      message.data[3] = 0; //formatted in HEX???????????????????????????????????????????????????
+      message.data[4] = (canPitch / 1000) % 10;
+      message.data[5] = (canPitch / 100) % 10;
+      message.data[6] = (canPitch / 10) % 10;
+      message.data[7] = canPitch % 10;
+    }
+    else
+    {
+      canPitch = int(pitch * 100.0);
+      message.data[0] = 0;
+      message.data[1] = 0;
+      message.data[2] = 0;
+      message.data[3] = 0; //formatted in HEX??????????????????????????????????????????????????? CHECK OVERFLOW, MIGHT NEED ANOTHER VAR FOR BIGGER DIGITS >>> CHECK IF NEEDS TO BE HEX OUTPUT
+      message.data[4] = (canPitch / 1000) % 10;
+      message.data[5] = (canPitch / 100) % 10;
+      message.data[6] = (canPitch / 10) % 10;
+      message.data[7] = canPitch % 10;
+    }
+  }
+    
+  else
+  {
+    message.data[0] = 1;
+    message.data[1] = 1;
+    message.data[2] = 1;
+    message.data[3] = 1; //formatted in HEX
+    message.data[4] = 1;
+    message.data[5] = 1;
+    message.data[6] = 1;
+    message.data[7] = 1;
+  }
+
+mcp2515_bit_modify(CANCTRL, (1<<REQOP2)|(1<<REQOP1)|(1<<REQOP0), 0);
+mcp2515_send_message(&message);
+
+delay(5);
   
 }
-
-void processAccelData() {
-  gForceX = accelerometer_x / ACCEL_SCALE_FACTOR;
-  gForceY = accelerometer_y / ACCEL_SCALE_FACTOR;
-  gForceZ = accelerometer_z / ACCEL_SCALE_FACTOR;
-}
-
-void processGyroData() {
-  rotX = gyro_x / GYRO_SCALE_FACTOR;
-  rotY = gyro_y / GYRO_SCALE_FACTOR;
-  rotZ = gyro_z / GYRO_SCALE_FACTOR;
-}
-
-// init the variables you need and then pointers to those variables
-// then pass the address of the variables to the function

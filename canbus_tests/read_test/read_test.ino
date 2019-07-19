@@ -7,7 +7,7 @@
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(9600); // For debug use
+  Serial.begin(115200); // For debug use
   Serial.println("CAN Read - Testing receival of CAN Bus message");  
   delay(1000);
   
@@ -39,7 +39,7 @@ if (mcp2515_check_message())
                Serial.print(", ");
                for(int i=0;i<message.header.length;i++) 
                 { 
-                  Serial.print(message.data[i],HEX);
+                  Serial.print(message.data[i],DEC);
                   Serial.print(" ");
                 }
                Serial.println("");
